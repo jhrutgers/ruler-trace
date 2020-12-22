@@ -12,11 +12,11 @@ EBNF:
 	Meta = frame<Meta>, index, frame<Meta> } ;
 	index = { padding }, frame<index>, { frame<index> } ;
 	padding = frame<nul> | frame<padding> ;
-	frame<type> = id, [ length ], payload
-	id = int              (* LSb: 'more': indicates that the following frame should appended *)
-	int = byte, { byte }  (* Unsigned LEB128 *)
-	length = int          (* length of payload in bytes *)
-	payload = { byte }
+	frame<type> = id, [ length ], payload ;
+	id = int ;              (* LSb: 'more': indicates that the following frame should appended *)
+	int = byte, { byte } ;  (* Unsigned LEB128 *)
+	length = int ;          (* length of payload in bytes *)
+	payload = { byte } ;
 
 `Marker` marks the tick of the major units (10 MB?), filled with repeating
 magic words (which includes file format version) to resync corrupt file. No
@@ -25,11 +25,12 @@ frame can be larger than the `Marker` frame. If a chunk of data looks like a
 other frame.
 
 `Index` and `index` mark the tick of the minor units (100 KB?).  `Index` is a
-ordered list of all frame types and the offset to its first occurrence in the
-last `unit`, except for `nul`, `padding`, and `meta`, which are never in the
-index. `Meta` points to the previous `Meta` that was _different_ from the
-current one.  `index` is a ordered list of all frame types which has a changed
-offset with respect to the last `Index`.
+ordered list of all frame types and the byte offset from start of the index
+frame to the start of the first occurrence in the last `unit`, except for
+`nul`, `padding`, and `meta`, which are never in the index. `Meta` points to
+the previous `Meta` that was _different_ from the current one.  `index` is a
+ordered list of all frame types which has a changed offset with respect to the
+last `Index`.
 
 `Meta` holds all used frame types of the previous `Unit`. Unused entries are
 discarded, but IDs are never reused. If during a `Unit` a new stream is added,
@@ -214,8 +215,8 @@ last time. For this, a clock delta can be defined:
 
 The `delta` field determines that it is a delta on another clock.
 
-This is a new clock, which is a delta on `clk` (after conversion to a
-`timespec`), encoded as Unsigned LEB128.  Now, objects can use `clk delta` as
+This is a new clock, which is a delta on `clk` in seconds (after conversion to
+a `timespec`), encoded as Unsigned LEB128.  Now, objects can use `clk delta` as
 their clock instead of `clk`. The trace file only has to have the actual `clk`
 timestamp once in a while (like every minute), and emit `clk delta` frames for
 updates.
@@ -230,7 +231,7 @@ may contain the following sequence now:
 	frame<clk delta>    // E.g. +.200
 	frame<sample>       // Effective timestamp: 14:15:30.756
 	frame<clk delta>    // E.g. +.300
-	frame<clk>          // E.g. 14.15.31.034
+	frame<clk>          // E.g. 14:15:31.034
 	frame<sample>       // clk delta was not updated yet, so 14:15:30.856
 	frame<clk delta>
 	...
