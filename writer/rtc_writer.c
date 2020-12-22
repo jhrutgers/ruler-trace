@@ -146,28 +146,28 @@ static rtc_stream_param const rtc_default_stream_param[RTC_STREAM_DEFAULT_COUNT]
 	{
 		/* .name = */ "Marker",
 		/* .frame_length = */ RTC_FRAME_MAX_PAYLOAD,
-		/* .json = */ "name:\"Marker\",length:" STRINGIFY(RTC_FRAME_MAX_PAYLOAD) ",mime:\"application/x-marker\"",
+		/* .json = */ "name:\"Marker\",length:" STRINGIFY(RTC_FRAME_MAX_PAYLOAD),
 		/* .hidden = */ true
 	},
 	{
 		/* .name = */ "Index",
 		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
-		/* .json = */ "name:\"Index\",mime:\"application/x-index\""
+		/* .json = */ "name:\"Index\",format:\"index\""
 	},
 	{
 		/* .name = */ "index",
 		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
-		/* .json = */ "name:\"index\",mime:\"application/x-index\""
+		/* .json = */ "name:\"index\",format:\"index\""
 	},
 	{
 		/* .name = */ "Meta",
 		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
-		/* .json = */ "name:\"Meta\",mime:\"application/json\""
+		/* .json = */ "name:\"Meta\",format:\"json\""
 	},
 	{
 		/* .name = */ "meta",
 		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
-		/* .json = */ "name:\"meta\",mime:\"application/json\"",
+		/* .json = */ "name:\"meta\",format:\"json\"",
 		/* .hidden = */ true
 	}
 };
