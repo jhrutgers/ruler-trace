@@ -38,7 +38,7 @@
 #  define MAX(a,b)	((a) > (b) ? (a) : (b))
 #endif
 #ifndef MIN
-#  define MIN(a,b)  ((a) < (b) ? (a) : (b))
+#  define MIN(a,b)	((a) < (b) ? (a) : (b))
 #endif
 
 #ifndef STRINGIFY
@@ -165,8 +165,9 @@ static crc_t rtc_crc_end(crc_t crc) {
 }
 #endif
 
+
 /**************************************
- * Trace
+ * Stream config
  */
 
 void rtc_param_default(rtc_param* param) {
@@ -225,52 +226,16 @@ static rtc_stream_param const rtc_default_stream_param[RTC_STREAM_DEFAULT_COUNT]
 		/* .name = */ "Platform",
 		/* .frame_length = */ sizeof(crc_t),
 		/* .json = */ "name:\"Platform\",format:\"platform\"",
-		/* .hidden = */ true
+		/* .hidden = */ false
 	},
 	{
 		/* .name = */ "Crc",
 		/* .frame_length = */ sizeof(crc_t),
 		/* .json = */ "name:\"Crc\",format:\"uint32\"",
-		/* .hidden = */ true
+		/* .hidden = */ false
 	}
 };
 
-int rtc_start(rtc_handle* h, rtc_param const* param) {
-	int i;
-
-	if(!h)
-		return EINVAL;
-	if(!param)
-		return EINVAL;
-	if(!param->write)
-		return EINVAL;
-	if(param->Unit < RTC_MIN_UNIT_SIZE)
-		return EINVAL;
-	if(param->unit < RTC_MIN_UNIT_SIZE)
-		return EINVAL;
-	if(param->Unit < param->unit)
-		return EINVAL;
-	if(rtc_popcount(param->Unit) != 1)
-		return EINVAL;
-	if(rtc_popcount(param->unit) != 1)
-		return EINVAL;
-
-	memset(h, 0, sizeof(*h));
-	h->param = param;
-
-	for(i = 0; i < RTC_STREAM_DEFAULT_COUNT; i++)
-		check_res(rtc_open(h, &h->default_streams[i], &rtc_default_stream_param[i]));
-
-	return 0;
-}
-
-int rtc_stop(rtc_handle* h) {
-	if(!h)
-		return EINVAL;
-
-	h->param->write(h, NULL, 0, RTC_FLAG_STOP | RTC_FLAG_FLUSH);
-	return 0;
-}
 
 
 /**************************************
@@ -325,7 +290,9 @@ int rtc_json(rtc_handle* h, rtc_write_callback* cb, bool defaults) {
 
 static int rtc_meta(rtc_stream* s);
 
-int rtc_open(rtc_handle* h, rtc_stream* s, rtc_stream_param const* param) {
+int rtc_create(rtc_handle* h, rtc_stream* s, rtc_stream_param const* param) {
+	rtc_stream* es;
+
 	if(!h)
 		return EINVAL;
 	if(!s)
@@ -335,9 +302,14 @@ int rtc_open(rtc_handle* h, rtc_stream* s, rtc_stream_param const* param) {
 	if(h->free_id && (h->free_id << 1u) == 0)
 		return ENOMEM;
 
+	for(es = h->first_stream; es; es = es->next)
+		if(strcmp(es->param->name, param->name) == 0)
+			return EEXIST;
+
 	memset(s, 0, sizeof(*s));
 	s->param = param;
 	s->h = h;
+	s->open = 1;
 	s->id = h->free_id++;
 	s->id_str_len = rtc_itoa(s->id, s->id_str, sizeof(s->id_str));
 	assert(s->id_str_len < sizeof(s->id_str));
@@ -359,11 +331,34 @@ int rtc_open(rtc_handle* h, rtc_stream* s, rtc_stream_param const* param) {
 	return 0;
 }
 
+int rtc_open(rtc_handle* h, rtc_stream** s, char const* name) {
+	if(!h)
+		return EINVAL;
+	if(!s)
+		return EINVAL;
+	if(!name || !*name)
+		return EINVAL;
+
+	for(*s = h->first_stream; *s; *s = (*s)->next)
+		if(strcmp((*s)->param->name, name) == 0) {
+			(*s)->open++;
+			return 0;
+		}
+
+	return ESRCH;
+}
+
 int rtc_close(rtc_stream* s) {
 	if(!s)
 		return EINVAL;
-	if(!s->h)
+	if(s->open == 0)
+		/* Already closed. */
 		return 0;
+	if(s->open > 1) {
+		/* Do not really close yet. */
+		s->open--;
+		return 0;
+	}
 	if(s->used)
 		return EAGAIN;
 
@@ -382,7 +377,6 @@ int rtc_close(rtc_stream* s) {
 		s->next->prev = s->prev;
 	}
 
-	s->h = NULL;
 	return 0;
 }
 
@@ -467,12 +461,13 @@ static char const rtc_padding_buffer[MIN(64, RTC_MIN_UNIT_SIZE)];
 
 static int rtc_padding(rtc_handle* h, size_t len) {
 	char hdr[RTC_FRAME_MAX_HEADER_SIZE];
-	size_t hdrlen;
-	size_t chunk;
-	size_t payload;
 	rtc_stream* s = &h->default_streams[RTC_STREAM_padding];
 
 	while(len) {
+		size_t hdrlen;
+		size_t chunk;
+		size_t payload;
+
 		if(len == 1) {
 			/* nul frame is a 0 byte */
 			return rtc_emit(h, rtc_padding_buffer, 1, 0);
@@ -518,13 +513,21 @@ static int rtc_index_(rtc_stream* s, bool full) {
 	char entry[RTC_ENCODE_INT_BUF(s->h->free_id) + RTC_ENCODE_INT_BUF(rtc_offset)];
 	size_t entryLen = 0;
 
+	if(full) {
+		entryLen = rtc_encode_int(s->h->Unit_count, entry);
+		check_res(rtc_frame_append(s, &indexFrame, entry, entryLen, 0));
+		entryLen = 0;
+	}
+
 	for(si = s->h->first_stream; si; si = si->next) {
+		if(si->param->hidden)
+			continue;
 		if(!si->param->hidden && (full || si->index >= since)) {
 			/* Flush out previous entry. */
 			check_res(rtc_frame_append(s, &indexFrame, entry, entryLen, 0));
-			/* Assembly next entry. */
+			/* Assemble next entry. */
 			entryLen = rtc_encode_int((si->id << 1u) | 1u, entry);
-			entryLen += rtc_encode_int((here - si->index) << 1u, entry + entryLen);
+			entryLen += rtc_encode_int(si->index ? (here - si->index) << 1u : 0, entry + entryLen);
 		}
 	}
 
@@ -537,14 +540,15 @@ static int rtc_index_(rtc_stream* s, bool full) {
 static int rtc_Index(rtc_handle* h) {
 	rtc_stream* s = &h->default_streams[RTC_STREAM_Index];
 	rtc_offset i = h->cursor;
-	h->unit_end = h->cursor + h->param->unit;
-	check_res(rtc_index_(s, true));
 
-	if(s->index) {
-		/* Update index's index such that it shows up in the Index, but not in
-		 * other indexes. */
-		s->h->default_streams[RTC_STREAM_index].index = s->index - s->h->param->unit;
+	if(unlikely(!s->index)) {
+		/* First Index, reflect params in Index's and index's index,
+		 * even though they point to before the beginning of the file. */
+		s->index = h->cursor - h->param->Unit;
+		h->default_streams[RTC_STREAM_index].index = h->cursor - h->param->unit;
 	}
+
+	check_res(rtc_index_(s, true));
 
 	s->index = i;
 	return 0;
@@ -552,8 +556,16 @@ static int rtc_Index(rtc_handle* h) {
 
 static int rtc_index(rtc_handle* h) {
 	rtc_stream* s = &h->default_streams[RTC_STREAM_index];
-	h->unit_end = h->cursor + h->param->unit;
-	return rtc_index_(s, false);
+	rtc_offset i = h->cursor;
+
+	/* Update index such that it it does not show up in the index. */
+	if(likely(s->index))
+		s->index = s->h->default_streams[RTC_STREAM_Index].index - 1;
+
+	check_res(rtc_index_(s, false));
+
+	s->index = i;
+	return 0;
 }
 
 static int rtc_Meta_callback(rtc_handle* h, void const* buf, size_t len, int flags) {
@@ -587,7 +599,7 @@ static int rtc_Crc(rtc_handle* h) {
 
 	return rtc_write_(s, &crc, sizeof(crc), false, true);
 }
-#endif /* RTC_NO_CRC */
+#endif /* !RTC_NO_CRC */
 
 static rtc_marker const buffer[MIN(16, RTC_MIN_UNIT_SIZE / sizeof(rtc_marker))] = {
 	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
@@ -632,12 +644,19 @@ static int rtc_start_Unit(rtc_handle* h) {
 	h->Unit_end = h->cursor + h->param->Unit;
 #ifndef RTC_NO_CRC
 	h->Unit_end -= RTC_FRAME_CRC_SIZE;
-
-	if(h->cursor > 0)
-		check_res(rtc_Crc(h));
 #endif
 
+	if(likely(h->cursor > 0)) {
+#ifndef RTC_NO_CRC
+		check_res(rtc_Crc(h));
+#endif
+		h->Unit_count++;
+		if(unlikely(h->Unit_count == 0u))
+			return ENOMEM;
+	}
+
 	check_res(rtc_Marker(h));
+	h->unit_end = h->cursor + h->param->unit;
 	check_res(rtc_Index(h));
 	check_res(rtc_Meta(h));
 	check_res(rtc_Platform(h));
@@ -646,6 +665,7 @@ static int rtc_start_Unit(rtc_handle* h) {
 }
 
 static int rtc_start_unit(rtc_handle* h) {
+	h->unit_end = h->cursor + h->param->unit;
 	return rtc_index(h);
 }
 
@@ -661,9 +681,6 @@ static void rtc_set_index(rtc_stream* s) {
 
 static int rtc_write_(rtc_stream* s, void const* buffer, size_t len, bool more, bool stayInUnit) {
 	char hdr[RTC_FRAME_MAX_HEADER_SIZE];
-	size_t hdrlen;
-	size_t rem;
-	size_t chunklen;
 	char const* buffer_ = (char const*)buffer;
 	rtc_handle* h = s->h;
 	bool first = true;
@@ -672,10 +689,9 @@ static int rtc_write_(rtc_stream* s, void const* buffer, size_t len, bool more, 
 		return 0;
 
 	while(len) {
-		chunklen = MIN(len, rtc_default_stream_param[RTC_STREAM_Marker].frame_length);
-
-		hdrlen = rtc_header(s, chunklen, hdr, more || chunklen != len);
-		rem = MIN(h->Unit_end, h->unit_end) - h->cursor;
+		size_t chunklen = MIN(len, rtc_default_stream_param[RTC_STREAM_Marker].frame_length);
+		size_t hdrlen = rtc_header(s, chunklen, hdr, more || chunklen != len);
+		size_t rem = MIN(h->Unit_end, h->unit_end) - h->cursor;
 
 		if(likely(rem >= hdrlen + chunklen)) {
 			/* Frame fits. */
@@ -737,5 +753,52 @@ int rtc_write(rtc_stream* s, void const* buffer, size_t len, bool more) {
 		return EINVAL;
 
 	return rtc_write_(s, buffer, len, more, false);
+}
+
+
+/**************************************
+ * Trace
+ */
+
+int rtc_start(rtc_handle* h, rtc_param const* param) {
+	int i;
+
+	if(!h)
+		return EINVAL;
+	if(!param)
+		return EINVAL;
+	if(!param->write)
+		return EINVAL;
+	if(param->Unit < RTC_MIN_UNIT_SIZE)
+		return EINVAL;
+	if(param->unit < RTC_MIN_UNIT_SIZE)
+		return EINVAL;
+	if(param->Unit < param->unit)
+		return EINVAL;
+	if(rtc_popcount(param->Unit) != 1)
+		return EINVAL;
+	if(rtc_popcount(param->unit) != 1)
+		return EINVAL;
+
+	memset(h, 0, sizeof(*h));
+	h->param = param;
+
+	for(i = 0; i < RTC_STREAM_DEFAULT_COUNT; i++)
+		check_res(rtc_create(h, &h->default_streams[i], &rtc_default_stream_param[i]));
+
+	return 0;
+}
+
+int rtc_stop(rtc_handle* h) {
+	if(!h)
+		return EINVAL;
+
+#ifndef RTC_NO_CRC
+	if(h->cursor > 0)
+		rtc_Crc(h);
+#endif
+
+	h->param->write(h, NULL, 0, RTC_FLAG_STOP | RTC_FLAG_FLUSH);
+	return 0;
 }
 

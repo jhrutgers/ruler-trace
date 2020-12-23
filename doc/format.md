@@ -1,11 +1,73 @@
 # RTC file format
 
+The Ruler Trace Container is like a ruler:
+
+	----- 0      ^
+	-- 0.1       |
+	-- 0.2   (major) Unit
+	-- 0.3       |
+	----- 1      v
+	-- 1.1
+	-- 1.2   <-- (minor) unit
+	-- 1.3
+	----- 2
+	-- 2.1
+	-- 2.2
+	-- 2.3
+	----- 3  <-- Marker, with Index and Meta
+	-- 3.1   <-- index
+	-- 3.2
+	-- 3.3
+	----- 4
+	...
+
+What is measures is the RTC file size, so at (configurable, but) predictable
+positions in the file, a `Unit` and `unit` boundary exists. At the start of a
+`Unit`, `Meta` data is repeated, a full `Index` exists, and other details are
+injected in the file. A `unit` is like a delta on the previous `Unit` and/or
+`unit`. Because the reader knows where it can find the index of every unit,
+parsing and searching the file is fast, as only the part of the file is to be
+loaded and parsed that is of interest.
+
+A file may be truncated, and remains readable, as there is no special beginning
+or end of the file which contains things like a pointers to data structures.
+`Unit` boundaries can be recognized, wherever you start reading the file.
+Moreover, a `Unit` is protected by a CRC.
+
+In between the `Unit` and `unit` indices, frames are injected, which hold the
+actual data.  A frame has a maximum size. If larger data is to be embedded,
+multiple consecutive frames should be concatenated while reading it. For example:
+
+	----- 4       Marker frame  // fixed size
+	              Index frame   // variable size, but must fit within unit
+	              Meta frame    // variable size
+	              data frame    // configured as fixed or variable size
+	              data frame
+	-- 4.1        index frame   // variable size, but must fit within unit
+	              data frame
+	              data frame
+	              data frame
+	-- 4.2        index frame
+	              data frame    // Data is longer than maximum frame length.
+	              data frame (continued)
+	              data frame (continued)
+	-- 4.3        index frame   // Even the index may be in between.
+	              data frame (continued)
+	              data frame
+	              padding       // To align the Marker, padding may be required.
+	---- 5        Marker frame
+	              Index frame
+	...
+
+The data frame belong to a stream, which can be a stdout stream, measurement
+data stream, event stream, etc.  Multiple streams are freely multiplexed.
+
 ## File format grammar
 
 EBNF:
 
 	rtc = { Unit } ;
-	Unit = Marker, Index, Meta, { frame }, { unit }, [ Crc];
+	Unit = Marker, Index, Meta, { frame }, { unit }, [ Crc ];
 	unit = index, frame, { frame } ;
 	Marker = { padding }, frame<Marker> ;
 	Index = frame<Index>, { frame<Index> } ;
@@ -37,6 +99,9 @@ last `Index`.
 discarded, but IDs are never reused. If during a `Unit` a new stream is added,
 `meta` describes the difference. The last value in the `Meta` or `meta` array
 indicates the id that is free to use.
+
+`Crc` holds a CRC32-IEEE of all bytes starting after the last `Marker` till the
+start of the `Crc` frame.
 
 ## Meta stream
 
@@ -138,15 +203,19 @@ Data, not to be processed.
 
 EBNF:
 
-	index = { entry } ;
+	index = [ count ], { entry } ;
+	count = int ;
 	entry = index_id, index_offset ;
-	index_id = int      (* (id << 1 | 1) *)
-	index_offset = int  (* offset << 1 *)
+	index_id = int ;      (* (id << 1 | 1) *)
+	index_offset = int ;  (* offset << 1 *)
 
 The index id has the LSb set to 1, where the offset never has. Therefore, a
 binary search through the index is possible, even if the entry length is
 unknown; decode the `int`, check the LSb to determine where you are in the
 entry and compensate for that.
+
+`count` indicates the `Unit` count from the beginning of the file. The `Index`
+always has the `count`, the `index` never has.
 
 ### json
 
@@ -185,6 +254,13 @@ Platform details. For now, it only contains the value 0x01020304 in the
 platform endianness. This frame may be extended in the future for more
 information.
 
+### annotate/.\*
+
+Annotation. The format of the frame is the clock as `timespec`, and the
+remainder of the frame is the type as indicated after `annotate/`. If the
+annotation's `clock` field refers to a clock that has no relation to the Epoch,
+the `timespec` value is relative to the related stream's clock.
+
 ## Timestamp
 
 Every frame belongs to the last specified timestamp frame.
@@ -217,7 +293,14 @@ differently.
 Multiple clocks may exist in the trace simultaneously. An object has to
 indicate to which clock it belongs. To do this, it must set its `clock` field
 to the name of the (previously defined) clock object. If `clock` is not set (or
-`null`), the frame does not belong to any clock.
+`null`), the frame does not belong to any clock. For example, to insert
+arbitrary strings as events, like log entries:
+
+	{
+		name: "event",
+		clock: "clk",
+		type: "utf-8"
+	}
 
 The relation between different clocks is undefined. The relation may be
 deducted from the fact that they are both in the same trace, but the file
@@ -257,4 +340,27 @@ may contain the following sequence now:
 	frame<sample>       // clk delta was not updated yet, so 14:15:30.856
 	frame<clk delta>
 	...
+
+## Annotation
+
+To insert an annotation to a specific stream, add a stream like:
+
+	{
+		name: "remarks",
+		stream: "stdout",
+		type: "annotate/utf-8"
+	}
+
+Note the `stream` field, which refers to another stream. If omitted, the
+annotation is placed on the given timestamp. The frame will hold a timestamp,
+which is related to `stdout`'s clock, followed by a string.
+
+A `remarks` frame is appended to the RTC file. The frame itself has no relation
+to a clock (the `clock` field is not set), but adds some note to the past. So
+the position in the RTC file is irrelevant.
+
+Annotations can be used by the user to add comments to events in the trace, but
+also to show when an application started, or what the version is of the
+software or hardware.  It is up to the application how this information is
+formatted.
 

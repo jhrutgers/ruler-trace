@@ -41,3 +41,5 @@ freely. If a frame contains one sample, let's say a 32-bit integer, the
 overhead of writing this frame is one byte, which contains the identifier of
 the stream.
 
+For details, see [doc/format.md](doc/format.md).
+

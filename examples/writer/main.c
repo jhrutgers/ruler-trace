@@ -22,6 +22,7 @@ int main() {
 	rtc_param param;
 	rtc_handle h;
 	rtc_stream_param sp = {"bla", RTC_STREAM_VARIABLE_LENGTH, "bla: true", false};
+	rtc_stream_param sp2 = {"bla2", RTC_STREAM_VARIABLE_LENGTH, "bla: true", false};
 	rtc_stream s;
 	rtc_stream s2;
 
@@ -29,31 +30,33 @@ int main() {
 	param.unit = 64;
 	param.write = rtc_write_stdout;
 
-	rtc_start(&h, &param);
+	check_res(rtc_start(&h, &param));
 #if 0
-	rtc_meta(&h, rtc_write_stdout, true);
+	check_res(rtc_meta(&h, rtc_write_stdout, true));
 #endif
 
-	check_res(rtc_open(&h, &s, &sp));
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 2, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
-	rtc_write(&s, "asdf", 4, false);
+	check_res(rtc_create(&h, &s, &sp));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 2, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
+	check_res(rtc_write(&s, "asdf", 4, false));
 
-	rtc_open(&h, &s2, &sp);
-	rtc_write(&s2, "zzzz", 4, false);
+	check_res(rtc_create(&h, &s2, &sp2));
+	check_res(rtc_write(&s2, "zzzz", 4, false));
 
-	rtc_write(&s, "asdf", 4, false);
+	check_res(rtc_write(&s, "asdf", 4, false));
+
+	check_res(rtc_stop(&h));
 
 	return 0;
 }

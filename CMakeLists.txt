@@ -19,5 +19,40 @@ endif()
 
 add_compile_options(-Wall -Wextra -Werror -Wdouble-promotion -Wformat=2 -Wconversion -ffunction-sections -fdata-sections)
 add_subdirectory(writer)
-add_subdirectory(examples)
 
+option(RTC_EXAMPLES "Build examples" ON)
+if(RTC_EXAMPLES)
+	add_subdirectory(examples)
+endif()
+
+find_program(CPPCHECK_CMD NAMES cppcheck)
+if(CPPCHECK_CMD)
+	if(RTC_EXAMPLES)
+		set(CPPCHECK_EXAMPLES
+			examples
+		)
+	endif()
+
+	add_custom_target(cppcheck
+		COMMAND
+			${CPPCHECK_CMD}
+			--enable=warning,style,information
+			--force
+			--inline-suppr
+			--quiet
+			--suppressions-list=${CMAKE_CURRENT_SOURCE_DIR}/.cppcheck_suppr
+			--error-exitcode=1
+#			--xml
+			${CPPCHECK_EXAMPLES}
+			-I writer
+			writer
+#			--check-config
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		VERBATIM
+	)
+
+	option(RTC_CPPCHECK "Run cppcheck by default" ON)
+	if(RTC_CPPCHECK)
+		add_custom_target(cppcheck-all ALL DEPENDS cppcheck)
+	endif()
+endif()
