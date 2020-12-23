@@ -19,16 +19,44 @@
  */
 
 #include <stddef.h>
-#include <stdbool.h>
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+/* C11 */
+#  include <stdbool.h>
+#  include <stdint.h>
+#  ifdef RTC_64BIT_SIZE
+typedef uint64_t rtc_offset;
+#  else
+typedef size_t rtc_offset;
+#  endif
+typedef uint32_t crc_t;
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+/* C99 */
+#  include <stdbool.h>
+#  include <stdint.h>
+typedef size_t rtc_offset;
+typedef uint32_t crc_t;
+#else
+/* Assume C89 */
+#  ifndef bool
+#    ifdef RTC_HAVE_STDBOOL_H
+#      include <stdbool.h>
+#    else
+typedef enum { false, true } rtc_bool;
+#      define bool rtc_bool
+#    endif
+#  endif
+typedef size_t rtc_offset;
+#  include <limits.h>
+#  if UINT_MAX >= 0xffffffffUL
+typedef unsigned int crc_t;
+#  else
+typedef unsigned long crc_t;
+#  endif
+#endif
 
 #ifdef __cplusplus
 extern "C" {
-#endif
-
-#if __STDC_VERSION__ > 199901L && defined(RTC_64BIT_SIZE)
-typedef unsigned long long rtc_offset;
-#else
-typedef size_t rtc_offset;
 #endif
 
 enum {
@@ -88,6 +116,8 @@ enum {
 	RTC_STREAM_index,
 	RTC_STREAM_Meta,
 	RTC_STREAM_meta,
+	RTC_STREAM_Platform,
+	RTC_STREAM_Crc,
 	RTC_STREAM_DEFAULT_COUNT
 };
 
@@ -101,6 +131,9 @@ typedef struct rtc_handle {
 	bool meta_changed;
 	rtc_offset Unit_end;
 	rtc_offset unit_end;
+#ifndef RTC_NO_CRC
+	crc_t crc;
+#endif
 } rtc_handle;
 
 

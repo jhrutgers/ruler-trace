@@ -5,11 +5,12 @@
 EBNF:
 
 	rtc = { Unit } ;
-	Unit = Marker, Index, Meta, { frame }, { unit } ;
+	Unit = Marker, Index, Meta, { frame }, { unit }, [ Crc];
 	unit = index, frame, { frame } ;
 	Marker = { padding }, frame<Marker> ;
 	Index = frame<Index>, { frame<Index> } ;
 	Meta = frame<Meta>, index, frame<Meta> } ;
+	Crc = frame<Crc> ;
 	index = { padding }, frame<index>, { frame<index> } ;
 	padding = frame<nul> | frame<padding> ;
 	frame<type> = id, [ length ], payload ;
@@ -87,6 +88,16 @@ The special frames, which always exist, and are therefore omitted from the
 		id: 6,
 		name: "meta",
 		format: "json"
+	},
+	{
+		id: 7,
+		name: "platform",
+		format: "platform"
+	},
+	{
+		id: 8,
+		name: "Crc",
+		format: "uint32"
 	}
 
 The application could define objects, such as:
@@ -141,17 +152,18 @@ entry and compensate for that.
 
 JSON format.
 
-### u?int(8|16|32|64)(le|be)
+### u?int(8|16|32|64)(|le|be)
 
-A signed or unsigned int, with specified bit length and endianness.  If the
+A signed or unsigned int, with specified bit length and endianness. If no
+endianness is provided, native endianness of the writer is assumed.  If the
 object has a gain and/or offset field, they are applied to the value in the
 frame while decoding.
 
-### f(32|64)(le|be)
+### float(32|64)(|le|be)
 
-A floating point with specified bit length and endianness.  If the object has a
-gain and/or offset field, they are applied to the value in the frame while
-decoding.
+A floating point with specified bit length and endianness. If no endianness is
+provided, native endianness of the writer is assumed. If the object has a gain
+and/or offset field, they are applied to the value in the frame while decoding.
 
 ### u?leb128
 
@@ -162,6 +174,16 @@ are applied to the value in the frame while decoding.
 
 A `uint64be` and `uint32be` field resembling a `struct timespec`, with the
 meaning as populated by `timespec_get(..., TIME_UTC)` (C11).
+
+### utf-8
+
+UTF-8 string.
+
+### platform
+
+Platform details. For now, it only contains the value 0x01020304 in the
+platform endianness. This frame may be extended in the future for more
+information.
 
 ## Timestamp
 

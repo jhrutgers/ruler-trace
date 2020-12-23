@@ -21,7 +21,7 @@ static int rtc_write_stdout(rtc_handle* h, void const* buf, size_t len, int flag
 int main() {
 	rtc_param param;
 	rtc_handle h;
-	rtc_stream_param sp = {"bla", RTC_STREAM_VARIABLE_LENGTH, "bla: true"};
+	rtc_stream_param sp = {"bla", RTC_STREAM_VARIABLE_LENGTH, "bla: true", false};
 	rtc_stream s;
 	rtc_stream s2;
 
