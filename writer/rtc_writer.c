@@ -28,6 +28,7 @@
 
 #define RTC_FRAME_MAX_HEADER_SIZE 10
 #define RTC_FRAME_MAX_PAYLOAD 1024
+#define RTC_FRAME_MAX_SIZE (RTC_FRAME_MAX_HEADER_SIZE + RTC_FRAME_MAX_PAYLOAD)
 
 
 /**************************************
@@ -778,6 +779,9 @@ int rtc_start(rtc_handle* h, rtc_param const* param) {
 	if(rtc_popcount(param->Unit) != 1)
 		return EINVAL;
 	if(rtc_popcount(param->unit) != 1)
+		return EINVAL;
+	if(param->unit <= RTC_FRAME_MAX_SIZE)
+		/* A unit must be able to contain a Marker and Index. */
 		return EINVAL;
 
 	memset(h, 0, sizeof(*h));

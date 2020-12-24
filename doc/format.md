@@ -241,7 +241,7 @@ are applied to the value in the frame while decoding.
 
 ### timespec
 
-A `uint64be` and `uint32be` field resembling a `struct timespec`, with the
+A `uint64` and `uint32` field resembling a `struct timespec`, with the
 meaning as populated by `timespec_get(..., TIME_UTC)` (C11).
 
 ### utf-8

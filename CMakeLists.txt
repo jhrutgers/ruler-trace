@@ -43,6 +43,7 @@ if(CPPCHECK_CMD)
 			--suppressions-list=${CMAKE_CURRENT_SOURCE_DIR}/.cppcheck_suppr
 			--error-exitcode=1
 #			--xml
+			-Ubool
 			${CPPCHECK_EXAMPLES}
 			-I writer
 			writer

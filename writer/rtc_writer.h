@@ -38,7 +38,7 @@ typedef size_t rtc_offset;
 typedef uint32_t crc_t;
 #else
 /* Assume C89 */
-#  ifndef bool
+#  if !defined(bool) && !defined(__cplusplus)
 #    ifdef RTC_HAVE_STDBOOL_H
 #      include <stdbool.h>
 #    else
@@ -163,6 +163,13 @@ typedef struct rtc_handle {
 #endif
 } rtc_handle;
 
+/*!
+ * \def
+ * \brief Return the user-supplied \c arg from a #rtc_handle.
+ */
+#define rtc_arg(h)	((h) ? (h)->param->arg : NULL)
+
+
 
 /*!
  * \brief Initialize with default parameters.
@@ -192,7 +199,11 @@ int rtc_stop(rtc_handle* h);
  * \param defaults if \c true, also pass the default streams to \p cb
  * \return 0 on success, otherwise an errno.
  */
-int rtc_json(rtc_handle* h, rtc_write_callback* cb, bool defaults); /* show full json */
+int rtc_json(rtc_handle* h, rtc_write_callback* cb, bool defaults
+#ifdef __cplusplus
+	= true
+#endif
+	);
 
 /*!
  * \brief Create a new stream.
@@ -238,7 +249,11 @@ int rtc_close(rtc_stream* s); /* may return that it cannot delete it yet */
  * \return 0 on success, otherwise an errno. If an error is returned, the RTC
  *         may be left in an undefined state. Advice to #rtc_stop() and restart.
  */
-int rtc_write(rtc_stream* s, void const* buffer, size_t len, bool more);
+int rtc_write(rtc_stream* s, void const* buffer, size_t len, bool more
+#ifdef __cplusplus
+	= false
+#endif
+	);
 
 #ifdef __cplusplus
 } /* extern "C" */
