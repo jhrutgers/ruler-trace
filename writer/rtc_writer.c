@@ -27,7 +27,7 @@
  */
 
 #define RTC_FRAME_MAX_HEADER_SIZE 10
-#define RTC_FRAME_MAX_PAYLOAD 1024
+#define RTC_FRAME_MAX_PAYLOAD RTC_MARKER_BLOCK
 #define RTC_FRAME_MAX_SIZE (RTC_FRAME_MAX_HEADER_SIZE + RTC_FRAME_MAX_PAYLOAD)
 
 
@@ -643,9 +643,6 @@ static int rtc_Platform(rtc_handle* h) {
 
 static int rtc_start_Unit(rtc_handle* h) {
 	h->Unit_end = h->cursor + h->param->Unit;
-#ifndef RTC_NO_CRC
-	h->Unit_end -= RTC_FRAME_CRC_SIZE;
-#endif
 
 	if(likely(h->cursor > 0)) {
 #ifndef RTC_NO_CRC
@@ -655,6 +652,10 @@ static int rtc_start_Unit(rtc_handle* h) {
 		if(unlikely(h->Unit_count == 0u))
 			return ENOMEM;
 	}
+#ifndef RTC_NO_CRC
+	else
+		h->Unit_end -= RTC_FRAME_CRC_SIZE;
+#endif
 
 	check_res(rtc_Marker(h));
 	h->unit_end = h->cursor + h->param->unit;

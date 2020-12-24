@@ -19,6 +19,8 @@ endif()
 
 add_compile_options(-Wall -Wextra -Werror -Wdouble-promotion -Wformat=2 -Wconversion -ffunction-sections -fdata-sections)
 add_subdirectory(writer)
+add_subdirectory(reader)
+add_subdirectory(src)
 
 option(RTC_EXAMPLES "Build examples" ON)
 if(RTC_EXAMPLES)
@@ -46,7 +48,10 @@ if(CPPCHECK_CMD)
 			-Ubool
 			${CPPCHECK_EXAMPLES}
 			-I writer
+			-I reader/include
 			writer
+			reader
+			src
 #			--check-config
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		VERBATIM

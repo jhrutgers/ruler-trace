@@ -1,5 +1,5 @@
-#ifndef __RTC_H
-#define __RTC_H
+#ifndef RTC_WRITER_H
+#define RTC_WRITER_H
 /*
  * Ruler Trace Container
  * Copyright (C) 2020  Jochem Rutgers
@@ -70,6 +70,7 @@ enum {
 typedef unsigned char rtc_marker[4];
 #define RTC_MARKER_1 { 0xB9, 0xB9, 0xB9, 0xB9 } /* superscript 1 in ISO-8859-1 */
 #define RTC_MARKER RTC_MARKER_1
+#define RTC_MARKER_BLOCK 1024
 
 struct rtc_handle;
 
@@ -258,4 +259,4 @@ int rtc_write(rtc_stream* s, void const* buffer, size_t len, bool more
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-#endif /* __RTC_H */
+#endif /* RTC_WRITER_H */
