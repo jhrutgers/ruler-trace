@@ -67,8 +67,8 @@ enum {
 	RTC_FLAG_FLUSH = 8
 };
 
-typedef unsigned char rtc_marker[4];
-#define RTC_MARKER_1 { 0xB9, 0xB9, 0xB9, 0xB9 } /* superscript 1 in ISO-8859-1 */
+typedef unsigned char rtc_marker;
+#define RTC_MARKER_1 0xB9 /* superscript 1 in ISO-8859-1 */
 #define RTC_MARKER RTC_MARKER_1
 #define RTC_MARKER_BLOCK 1024
 

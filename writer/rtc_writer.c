@@ -189,7 +189,7 @@ static rtc_stream_param const rtc_default_stream_param[RTC_STREAM_DEFAULT_COUNT]
 	},
 	{
 		/* .name = */ "padding",
-		/* .frame_length = */ (size_t)-1,
+		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
 		/* .json = */ "name:\"padding\"",
 		/* .hidden = */ true
 	},
@@ -602,7 +602,19 @@ static int rtc_Crc(rtc_handle* h) {
 }
 #endif /* !RTC_NO_CRC */
 
-static rtc_marker const buffer[MIN(16, RTC_MIN_UNIT_SIZE / sizeof(rtc_marker))] = {
+static rtc_marker const buffer[MIN(64, RTC_MIN_UNIT_SIZE / sizeof(rtc_marker))] = {
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
+	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
 	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
 	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,
 	RTC_MARKER, RTC_MARKER, RTC_MARKER, RTC_MARKER,

@@ -19,24 +19,31 @@
 #include "help.h"
 #include "dump.h"
 
+#include <rtc/exception.h>
+
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
 
 int main(int argc, char** argv) {
 
-	if(argc <= 1) {
-		help(argc ? argv[0] : "rulert");
-		exit(1);
-	}
+	try {
+		if(argc <= 1) {
+			help(argc ? argv[0] : "rulert");
+			exit(1);
+		}
 
-	char* module = argv[1];
-	if(     strcmp(module, "help") == 0) help(argv[0]);
-	else if(strcmp(module, "dump") == 0) dump(argc, argv);
-	else {
-		fprintf(stderr, "Unknown module '%s'\n", module);
-		help(argv[0]);
-		exit(1);
+		char* module = argv[1];
+		if(     strcmp(module, "help") == 0) help(argv[0]);
+		else if(strcmp(module, "dump") == 0) dump(argc, argv);
+		else {
+			fprintf(stderr, "Unknown module '%s'\n", module);
+			help(argv[0]);
+			exit(1);
+		}
+	} catch(rtc::Exception& e) {
+		fprintf(stderr, "ERROR: %s\n", e.what());
+		exit(2);
 	}
 
 	return 0;

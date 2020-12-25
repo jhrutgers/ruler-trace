@@ -18,8 +18,10 @@
 
 #include "dump.h"
 
-#include <rtc_reader.h>
+#include <rtc/reader.h>
 #include "getopt_mini.h"
+
+#include <cinttypes>
 
 void dump_help(char const* progname, bool standalone) {
 	if(standalone)
@@ -27,6 +29,9 @@ void dump_help(char const* progname, bool standalone) {
 	fprintf(stderr, "%s dump <input>\n", progname);
 	fprintf(stderr, "  Parse and dump a RTC file.\n");
 	fprintf(stderr, "    input       The input RTC file.\n\n");
+}
+
+static void dump_mem(char const* desc, rtc::Reader& reader, rtc::Reader::Offset start, rtc::Reader::Offset end) {
 }
 
 void dump(int argc, char** argv) {
@@ -52,12 +57,24 @@ void dump(int argc, char** argv) {
 
 	char* input = argv[opt.optind + 1];
 
-	rtc::RtcReader reader;
-	if(reader.open(input)) {
-		fprintf(stderr, "%s\n", reader.lastErrorStr().c_str());
-		exit(2);
-	}
+	rtc::Reader reader;
+	reader.open(input);
 
 	printf("Dump %s\n", input);
+
+	auto c = reader.cursor();
+	auto offMarker = c.findMarker();
+
+	if(offMarker < 0) {
+		printf("No Marker found\n");
+		return;
+	}
+
+	printf("Found marker at %" PRIxPTR "\n", (uintptr_t)offMarker);
+
+	if(offMarker > 0)
+		dump_mem("Pre-Marker", reader, 0, offMarker);
+
+	auto offIndex = c.findIndex();
 }
 

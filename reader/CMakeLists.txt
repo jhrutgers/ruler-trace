@@ -1,5 +1,6 @@
 add_library(rtc_reader
-	include/rtc_reader.h
+	include/rtc/reader.h
+	include/rtc/exception.h
 	src/rtc_reader.cpp
 )
 
