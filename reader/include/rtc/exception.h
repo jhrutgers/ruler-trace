@@ -150,6 +150,12 @@ namespace rtc {
 		virtual ~SeekError() override = default;
 	};
 
+	class FormatError : public Exception {
+	public:
+		RTC_EXCEPTION_CTOR(FormatError)
+		virtual ~FormatError() override = default;
+	};
+
 #undef RTC_EXCEPTION_CTOR
 
 } // namespace

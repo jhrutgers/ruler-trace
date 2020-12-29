@@ -21,7 +21,7 @@ The Ruler Trace Container is like a ruler:
 	----- 4
 	...
 
-What is measures is the RTC file size, so at (configurable, but) predictable
+What is measured, is the RTC file size, so at (configurable, but) predictable
 positions in the file, a `Unit` and `unit` boundary exists. At the start of a
 `Unit`, `Meta` data is repeated, a full `Index` exists, and other details are
 injected in the file. A `unit` is like a delta on the previous `Unit` and/or

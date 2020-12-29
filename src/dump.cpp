@@ -31,7 +31,77 @@ void dump_help(char const* progname, bool standalone) {
 	fprintf(stderr, "    input       The input RTC file.\n\n");
 }
 
-static void dump_mem(char const* desc, rtc::Reader& reader, rtc::Reader::Offset start, rtc::Reader::Offset end) {
+static void dump_mem(char const* desc, rtc::Reader& reader, rtc::Offset start, rtc::Offset end) {
+	if(start < 0)
+		start = 0;
+	if(start >= end)
+		return;
+
+	if(desc && *desc)
+		printf("%s\n", desc);
+
+	uintptr_t p = start & ~(uintptr_t)0xf;
+	int pwidth = sizeof(end) * 2;
+	if(pwidth > 8 && (uintptr_t)end <= (uintptr_t)0xffffffffUL)
+		pwidth = 8;
+
+	for(; p < (uintptr_t)end; p += 0x10) {
+		printf("%*" PRIxPTR ": ", pwidth, p);
+
+		unsigned char buf[16];
+		size_t len = sizeof(buf);
+		size_t offset = 0;
+
+		if(p < (uintptr_t)start)
+			offset = (size_t)((uintptr_t)start - p);
+		if(p + offset + len >= (uintptr_t)end)
+			len = std::min<size_t>(16, (uintptr_t)end - p);
+
+		size_t readlen = len - offset;
+		len = reader.read(p + offset, buf, readlen);
+		bool eof = readlen > len;
+
+		size_t i = 0;
+		while(i < len) {
+			if(offset >= 8) {
+				printf("%*s", 8 * 3, "");
+				offset -= 8;
+			} else {
+				if(offset > 0)
+					printf("%*s", (int)(offset * 3), "");
+
+				for(size_t b = offset; b < 8u && i < len; i++, b++)
+					printf(" %02hhx", buf[i]);
+
+				offset = 0;
+			}
+
+			printf(" ");
+		}
+
+		printf("\n");
+
+		if(eof) {
+			printf("<eof>\n");
+			break;
+		}
+	}
+
+}
+
+static void dump_mem(rtc::Reader& reader, rtc::Frame const& frame) {
+	if(!frame.valid()) {
+		printf("\nInvalid frame\n");
+	} else {
+		std::string s = "\nStream \"";
+		s += frame.stream->name();
+		s += "\"";
+		if(frame.more)
+			s += " (more)";
+		s += "\n+header:";
+		dump_mem(s.c_str(), reader, frame.header, frame.payload);
+		dump_mem("+payload:", reader, frame.payload, frame.payload + frame.length);
+	}
 }
 
 void dump(int argc, char** argv) {
@@ -63,18 +133,33 @@ void dump(int argc, char** argv) {
 	printf("Dump %s\n", input);
 
 	auto c = reader.cursor();
-	auto offMarker = c.findMarker();
+	auto const& f = c.nextMarker();
 
-	if(offMarker < 0) {
+	if(!f) {
 		printf("No Marker found\n");
 		return;
 	}
 
-	printf("Found marker at %" PRIxPTR "\n", (uintptr_t)offMarker);
+	printf("Found marker at %" PRIxPTR "\n", (uintptr_t)f.header);
 
-	if(offMarker > 0)
-		dump_mem("Pre-Marker", reader, 0, offMarker);
+	if(f.header > 0)
+		dump_mem("Pre-Marker", reader, 0, f.header);
 
-	auto offIndex = c.findIndex();
+	try {
+		while(!c.eof()) {
+			dump_mem(reader, c.currentFrame());
+
+			if(!c.nextFrame()) {
+				// Invalid frame encountered.
+				auto gapStart = c.pos();
+				do {
+					c.nextFrame();
+					dump_mem("\nUnparseable gap:", reader, gapStart, c.pos());
+				} while(!c.currentFrame() && !c.eof());
+			}
+		}
+	} catch(rtc::SeekError&) {
+		printf("<terminated>\n");
+	}
 }
 
