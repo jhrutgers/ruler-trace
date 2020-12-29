@@ -184,55 +184,55 @@ static rtc_stream_param const rtc_default_stream_param[RTC_STREAM_DEFAULT_COUNT]
 	{
 		/* .name = */ "nop",
 		/* .frame_length = */ 0,
-		/* .json = */ "name:\"nop\",length:0",
+		/* .json = */ "\"name\":\"nop\",\"length\":0",
 		/* .hidden = */ true
 	},
 	{
 		/* .name = */ "padding",
 		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
-		/* .json = */ "name:\"padding\"",
+		/* .json = */ "\"name\":\"padding\"",
 		/* .hidden = */ true
 	},
 	{
 		/* .name = */ "Marker",
 		/* .frame_length = */ RTC_FRAME_MAX_PAYLOAD,
-		/* .json = */ "name:\"Marker\",length:" STRINGIFY(RTC_FRAME_MAX_PAYLOAD),
+		/* .json = */ "\"name\":\"Marker\",\"length\":" STRINGIFY(RTC_FRAME_MAX_PAYLOAD),
 		/* .hidden = */ true
 	},
 	{
 		/* .name = */ "Index",
 		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
-		/* .json = */ "name:\"Index\",format:\"index\"",
+		/* .json = */ "\"name\":\"Index\",\"format\":\"index\"",
 		/* .hidden = */ false
 	},
 	{
 		/* .name = */ "index",
 		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
-		/* .json = */ "name:\"index\",format:\"index\"",
+		/* .json = */ "\"name\":\"index\",\"format\":\"index\"",
 		/* .hidden = */ false
 	},
 	{
 		/* .name = */ "Meta",
 		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
-		/* .json = */ "name:\"Meta\",format:\"json\"",
+		/* .json = */ "\"name\":\"Meta\",\"format\":\"json\"",
 		/* .hidden = */ false
 	},
 	{
 		/* .name = */ "meta",
 		/* .frame_length = */ RTC_STREAM_VARIABLE_LENGTH,
-		/* .json = */ "name:\"meta\",format:\"json\"",
+		/* .json = */ "\"name\":\"meta\",\"format\":\"json\"",
 		/* .hidden = */ true
 	},
 	{
 		/* .name = */ "Platform",
 		/* .frame_length = */ sizeof(crc_t),
-		/* .json = */ "name:\"Platform\",format:\"platform\"",
+		/* .json = */ "\"name\":\"Platform\",\"format\":\"platform\"",
 		/* .hidden = */ false
 	},
 	{
 		/* .name = */ "Crc",
 		/* .frame_length = */ sizeof(crc_t),
-		/* .json = */ "name:\"Crc\",format:\"uint32\"",
+		/* .json = */ "\"name\":\"Crc\",\"format\":\"uint32\"",
 		/* .hidden = */ false
 	}
 };
@@ -244,7 +244,7 @@ static rtc_stream_param const rtc_default_stream_param[RTC_STREAM_DEFAULT_COUNT]
  */
 
 static int rtc_json_stream(rtc_stream* s, rtc_write_callback* cb) {
-	check_res(cb(s->h, "{id:", 4, 0));
+	check_res(cb(s->h, "{\"id\":", 6, 0));
 	check_res(cb(s->h, s->id_str, s->id_str_len, 0));
 
 	if(s->param_json_len) {

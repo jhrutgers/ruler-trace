@@ -70,6 +70,7 @@ namespace rtc {
 		void seek(Offset offset, int whence);
 		size_t read(Offset offset, void* dst, size_t len);
 		size_t readInt(Offset offset, uint64_t& dst);
+		static size_t decodeInt(unsigned char* buffer, size_t len, uint64_t& dst);
 		bool eof() const;
 
 		Cursor cursor();

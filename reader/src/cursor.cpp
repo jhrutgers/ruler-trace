@@ -277,13 +277,27 @@ Frame const& Cursor::prevIndex() {
 	return nextIndex();
 }
 
-/*
 Frame const& Cursor::nextMeta() {
+	Offset pos = index(RTC_STREAM_Meta);
+	assert(Unit() > 0);
+
+	if(pos < 0)
+		return m_frame = Frame();
+
+	seekUnsafe(pos + Unit());
+	return parseFrame();
 }
 
 Frame const& Cursor::prevMeta() {
+	Offset pos = index(RTC_STREAM_Meta);
+	assert(Unit() > 0);
+
+	if(pos < 0 || pos < Unit())
+		return m_frame = Frame();
+
+	seekUnsafe(pos - Unit());
+	return parseFrame();
 }
-*/
 
 Frame const& Cursor::nextFrame() {
 	if(!aligned()) {
@@ -306,8 +320,16 @@ Frame const& Cursor::nextFrame() {
 	return parseFrame();
 }
 
-/*Frame const& Cursor::nextFrame(Stream const& stream) {
-}*/
+Frame const& Cursor::nextFrame(Stream const& stream) {
+	// TODO: do smarter; skip full [Uu]nits when there are no frames expected
+	// in there of the given stream.
+
+	while(nextFrame())
+		if(currentFrame().stream->id == stream.id)
+			return currentFrame();
+
+	return currentFrame();
+}
 
 Cursor& Cursor::operator++() {
 	nextFrame();
@@ -319,13 +341,66 @@ Frame const& Cursor::currentFrame() const {
 	return m_frame;
 }
 
-Stream const* Cursor::stream(Stream::Id id) const {
+Stream const* Cursor::stream(Stream::Id id, bool autoLoadMeta) {
 	if(id < 0)
 		return nullptr;
 	if(id < RTC_STREAM_DEFAULT_COUNT)
 		return &defaultStreams[id];
 
 	auto it = m_streams.find(id);
+	if(it != m_streams.end())
+		return it->second;
+	if(!autoLoadMeta)
+		return nullptr;
+	if(!aligned())
+		// Not possible to find the Meta.
+		return nullptr;
+
+	// Unknown ID. Try loading the Meta stream.
+	// This may happen during other frame scanning, so
+	// save the current offset, so we can return to it later on.
+	Offset offset = pos();
+	bool seekToMeta = true;
+
+	assert(m_Marker >= 0);
+
+	if(Unit() > 0) {
+		// We know the size of the Unit. Try loading the Meta of the next
+		// Unit, as that one is probably more accurate.
+		try {
+			seekUnsafe(m_Marker + Unit() + MARKER_FRAME_SIZE);
+			seekToMeta = false;
+		} catch(SeekError&) {
+		}
+	}
+
+	try {
+		if(seekToMeta) {
+again:
+			// Use the current Unit's Meta.
+			seekUnsafe(m_Marker + MARKER_FRAME_SIZE);
+		}
+
+		// Move to next Meta from here.
+		if(nextMeta()) {
+			// Load the frame that is at the current cursor.
+			loadMeta();
+		}
+	} catch(SeekError&) {
+		if(!seekToMeta) {
+			// We tried to use the next Unit's Meta.
+			// That didn't work. Try this Unit's Meta instead.
+			goto again;
+		}
+
+		// Too bad. Give up.
+	}
+
+	seekUnsafe(offset);
+
+	// Retry lookup.
+	// TODO: fix the corner case that the stream is only mentioned in a meta.
+	it = m_streams.find(id);
 	return it == m_streams.end() ? nullptr : it->second;
 }
 
@@ -381,6 +456,172 @@ Offset Cursor::unit() const {
 
 bool Cursor::eof() const {
 	return m_eof;
+}
+
+Offset Cursor::index(Stream::Id id) {
+	Offset here = pos();
+
+	try {
+		// Make sure the index is up to date with the current pos().
+		if(!aligned()) {
+			m_index.clear();
+			m_Unit = -1;
+			m_unit = -1;
+			if(!nextIndex())
+				goto error;
+		}
+
+		if(Unit() <= 0) {
+rebuild_Index:
+			// No Index loaded yet.
+			m_index.clear();
+			m_Unit = -1;
+			m_unit = -1;
+
+			// Go back to the current Unit's Marker.
+			if(!prevMarker())
+				goto error;
+
+			// Now, go to the Index.
+			if(!nextIndex())
+				goto error;
+
+			// Load it.
+			loadIndex();
+		} else {
+			// The Index should be in the index.
+			auto it = m_index.find(RTC_STREAM_Index);
+			if(it == m_index.end())
+				// Huh? Bad index?
+				goto rebuild_Index;
+
+			if(here < it->second || here >= it->second + Unit())
+				// Out of Unit sync.
+				goto rebuild_Index;
+		}
+
+		// If we get here, we know m_index is in sync with the current Unit.
+		// Check if the delta is valid too.
+		assert(unit() > 0);
+
+		auto it = m_index.find(RTC_STREAM_index);
+		if(it == m_index.end() || it->second > here) {
+			// Fully replay index frames from last Index.
+			goto rebuild_Index;
+		} else if(it->second + unit() < here) {
+			// Replay the last (few) index frame(s).
+			Offset replay = it->second;
+
+			while(replay < here) {
+				seekUnsafe(replay);
+				loadIndex();
+				replay += unit();
+			}
+		}
+
+		// Ok, index is up to date now.
+		it = m_index.find(id);
+		return it == m_index.end() ? -1 : it->second;
+	} catch(...) {
+		seekUnsafe(here);
+		throw;
+	}
+
+error:
+	seekUnsafe(here);
+	return -1;
+}
+
+std::vector<unsigned char> Cursor::fullFrame() {
+	std::vector<unsigned char> buffer;
+
+	fullFrame([&](Frame const& f) {
+		if(f.length > 0) {
+			assert(f.payload >= 0);
+			size_t offset = buffer.size();
+			buffer.resize(buffer.size() + f.length);
+			if(reader().read(f.payload, &buffer[offset], f.length) != f.length)
+				throw FormatError("EOF");
+		}
+	);
+
+	return buffer;
+}
+
+void Cursor::loadIndex() {
+	// The Index and index are always one ore more consecutive frames.
+	// There are never interrupted by other frames.
+
+	if(!parseFrame())
+		throw FormatError("Wrong frame");
+
+	Offset here = pos();
+
+	bool haveCount = false;
+	switch(currentFrame().stream->id) {
+	case RTC_STREAM_Index:
+		haveCount = true;
+		break;
+	case RTC_STREAM_index:
+		break;
+	default:
+		throw FormatError("Wrong stream");
+	}
+
+	// Copy full index to a buffer.
+	auto buffer = fullFrame();
+
+	size_t decoded = 0;
+
+	if(haveCount)
+		decoded += Reader::decodeInt(&buffer[decoded], buffer.size() - decoded, m_IndexCount);
+	while(decoded < buffer.size()) {
+		uint64_t id;
+		uint64_t off;
+
+		decoded += Reader::decodeInt(&buffer[decoded], buffer.size() - decoded, id);
+		if(!(id & 1u))
+			throw FormatError("Wrong entry ID");
+		id >>= 1u;
+
+		decoded += Reader::decodeInt(&buffer[decoded], buffer.size() - decoded, off);
+		if((off & 1))
+			throw FormatError("Wrong entry offset");
+		off >= 1u;
+
+		m_index[id] = here - off;
+	}
+
+	if(haveCount) {
+		auto it = m_index.find(RTC_STREAM_Index);
+		if(it != m_index.end())
+			m_Unit = here - it->second;
+
+		it = m_index.find(RTC_STREAM_index);
+		if(it != m_index.end())
+			m_unit = here - it->second;
+	}
+}
+
+void Cursor::loadMeta() {
+	if(!parseFrame())
+		throw FormatError("Wrong frame");
+
+	switch(currentFrame().stream->id) {
+	case RTC_STREAM_Meta:
+	case RTC_STREAM_meta:
+		break;
+	default:
+		throw FormatError("Wrong stream");
+	}
+
+	// Copy full index to a buffer.
+	auto buffer = fullFrame();
+
+	auto j = json.parse((char const*)buffer.data());
+	printf("meta json: %s\n", j.dump().c_str());
+
+	// TODO: merge into m_meta
 }
 
 } // namespace

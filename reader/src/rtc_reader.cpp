@@ -155,15 +155,18 @@ size_t Reader::read(Offset offset, void* dst, size_t len) {
 size_t Reader::readInt(Offset offset, uint64_t& dst) {
 	unsigned char buf[10]; // Maximum length of encoded 64-bit value.
 	size_t buflen = read(offset, buf, sizeof(buf));
+	return decodeInt(buf, buflen, dst);
+}
 
+size_t Reader::decodeInt(unsigned char* buffer, size_t len, uint64_t& dst) {
 	dst = 0;
 	unsigned int shift = 0;
 	size_t i = 0;
 	while(true) {
-		if(i >= buflen)
-			throw FormatError("EOF");
+		if(i >= len)
+			throw FormatError("Int truncated");
 
-		unsigned char b = buf[i++];
+		unsigned char b = buffer[i++];
 		dst |= (uint64_t)(b & 0x7fu) << shift;
 		if(!(b & 0x80u))
 			return i;

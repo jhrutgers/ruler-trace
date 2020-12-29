@@ -110,80 +110,80 @@ as last element in the array. If not specified otherwise, these are the default
 properties of every object:
 
 	{
-		id: null,
-		name: null,
-		length: null,
-		cont: false,
-		format: "raw"
+		"id": null,
+		"name": null,
+		"length": null,
+		"cont": false,
+		"format": "raw"
 	}
 
 The special frames, which always exist, and are therefore omitted from the
 `Meta`, are these:
 
 	{
-		id: 0,
-		name: "nul",
-		length: 0
+		"id": 0,
+		"name": "nul",
+		"length": 0
 	},
 	{
-		id: 1,
-		name: "padding"
+		"id": 1,
+		"name": "padding"
 	},
 	{
-		id: 2,
-		name: "Marker",
-		length: 1024,
+		"id": 2,
+		"name": "Marker",
+		"length": 1024,
 	},
 	{
-		id: 3,
-		name: "Index",
-		format: "index"
+		"id": 3,
+		"name": "Index",
+		"format": "index"
 	},
 	{
-		id: 4,
-		name: "index",
-		format: "index"
+		"id": 4,
+		"name": "index",
+		"format": "index"
 	},
 	{
-		id: 5,
-		name: "Meta",
-		format: "json"
+		"id": 5,
+		"name": "Meta",
+		"format": "json"
 	},
 	{
-		id: 6,
-		name: "meta",
-		format: "json"
+		"id": 6,
+		"name": "meta",
+		"format": "json"
 	},
 	{
-		id: 7,
-		name: "platform",
-		format: "platform"
+		"id": 7,
+		"name": "platform",
+		"format": "platform"
 	},
 	{
-		id: 8,
-		name: "Crc",
-		format: "uint32"
+		"id": 8,
+		"name": "Crc",
+		"format": "uint32"
 	}
 
 The application could define objects, such as:
 
 	{
-		name: "stdout",
-		cont: true,
-		format: "utf-8"
+		"name": "stdout",
+		"cont": true,
+		"format": "utf-8"
 	},
 	{
-		name: "screenshot",
-		format: "png"
+		"name": "screenshot",
+		"format": "png"
 	},
 	{
-		name: "sample",
-		format: "uint16le",
-		foo: "bar"
+		"name": "sample",
+		"format": "uint16le",
+		"foo": "bar"
 	},
 	{
-		name: "foo",
-		format: "bar"
+		"name": "foo",
+		"format": "bar"
 	}
 
 Any additional attributes can be added to the object definition, which passed
@@ -267,9 +267,9 @@ Every frame belongs to the last specified timestamp frame.
 For this, the writer must specify a clock object, such as:
 
 	{
-		name: "clk",
-		clock: true,
-		type: "timespec"
+		"name": "clk",
+		"clock": true,
+		"format": "timespec"
 	}
 
 Note the `clock` field set to `true`.
@@ -279,10 +279,10 @@ application may have a different clock source, such as a cycle counter.  In
 that case, one can define a 100 MHz clock like this:
 
 	{
-		name: "clk",
-		clock: true,
-		type: "uint64le",
-		gain: 1e-6
+		"name": "clk",
+		"clock": true,
+		"format": "uint64le",
+		"gain": 1e-6
 	}
 
 A clock must be increasing, a wrap-around is not allowed.  Note that the offset
@@ -297,9 +297,9 @@ to the name of the (previously defined) clock object. If `clock` is not set (or
 arbitrary strings as events, like log entries:
 
 	{
-		name: "event",
-		clock: "clk",
-		type: "utf-8"
+		"name": "event",
+		"clock": "clk",
+		"format": "utf-8"
 	}
 
 The relation between different clocks is undefined. The relation may be
@@ -311,11 +311,11 @@ waste of space to repeat the full timestamp if it is almost the same as the
 last time. For this, a clock delta can be defined:
 
 	{
-		name: "clk delta",
-		clock: true,
-		type: "uleb128",
-		gain: 1e-6,
-		delta: "clk"
+		"name": "clk delta",
+		"clock": true,
+		"format": "uleb128",
+		"gain": 1e-6,
+		"delta": "clk"
 	}
 
 The `delta` field determines that it is a delta on another clock.
@@ -346,9 +346,9 @@ may contain the following sequence now:
 To insert an annotation to a specific stream, add a stream like:
 
 	{
-		name: "remarks",
-		stream: "stdout",
-		type: "annotate/utf-8"
+		"name": "remarks",
+		"stream": "stdout",
+		"format": "annotate/utf-8"
 	}
 
 Note the `stream` field, which refers to another stream. If omitted, the

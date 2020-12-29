@@ -22,6 +22,9 @@
 
 #include "rtc_writer.h"
 
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 #include <string>
 
 namespace rtc {

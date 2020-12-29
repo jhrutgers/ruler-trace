@@ -52,12 +52,12 @@ int main() {
 	rtc_handle h;
 	check_res(rtc_start(&h, &p));
 
-	rtc_stream_param param_clk = {"clk", RTC_STREAM_VARIABLE_LENGTH, "name:\"clk\",clock:true,content:\"timespec\""};
+	rtc_stream_param param_clk = {"clk", RTC_STREAM_VARIABLE_LENGTH, "\"name\":\"clk\",\"clock\":true,\"format\":\"timespec\""};
 	rtc_stream stream_clk;
 	check_res(rtc_create(&h, &stream_clk, &param_clk));
 	check_res(write_timestamp(&stream_clk));
 
-	rtc_stream_param param_stdin = {"stdin", RTC_STREAM_VARIABLE_LENGTH, "name:\"stdin\",cont:true,content:\"utf-8\""};
+	rtc_stream_param param_stdin = {"stdin", RTC_STREAM_VARIABLE_LENGTH, "\"name\":\"stdin\",\"cont\":true,\"format\":\"utf-8\""};
 	rtc_stream stream_stdin;
 	check_res(rtc_create(&h, &stream_stdin, &param_stdin));
 
