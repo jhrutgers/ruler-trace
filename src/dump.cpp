@@ -133,31 +133,18 @@ void dump(int argc, char** argv) {
 	printf("Dump %s\n", input);
 
 	auto c = reader.cursor();
-	auto const& f = c.nextMarker();
-
-	if(!f) {
-		printf("No Marker found\n");
-		return;
-	}
-
-	printf("Found marker at %" PRIxPTR "\n", (uintptr_t)f.header);
-
-	if(f.header > 0)
-		dump_mem("Pre-Marker", reader, 0, f.header);
+	auto prev = c.pos();
 
 	try {
-		while(!c.eof()) {
-			dump_mem(reader, c.currentFrame());
+		while(c.nextFrame()) {
+			auto const& f = c.currentFrame();
+			if(prev != f.header)
+				dump_mem("\nUnparseable gap:", reader, prev, f.header);
 
-			if(!c.nextFrame()) {
-				// Invalid frame encountered.
-				auto gapStart = c.pos();
-				do {
-					c.nextFrame();
-					dump_mem("\nUnparseable gap:", reader, gapStart, c.pos());
-				} while(!c.currentFrame() && !c.eof());
-			}
+			dump_mem(reader, f);
+			prev = f.payload + f.length;
 		}
+		printf("<parsed end>\n");
 	} catch(rtc::SeekError&) {
 		printf("<terminated>\n");
 	}

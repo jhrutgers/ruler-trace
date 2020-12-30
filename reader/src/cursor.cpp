@@ -45,6 +45,9 @@ void Cursor::reset() {
 	m_unit = -1;
 	m_frame = Frame();
 	m_streams.clear();
+	m_index.clear();
+	m_IndexCount = 0;
+	m_meta = json();
 }
 
 Offset Cursor::pos() const {
@@ -180,10 +183,12 @@ Frame const& Cursor::nextMarker() {
 		assert(m_Marker >= 0);
 
 		if(Unit() > 0) {
-			seekUnsafe(((pos() - m_Marker) / Unit() + 1) * Unit() + m_Marker);
+			seekUnsafe(currentUnitStart() + Unit());
 			auto const* f = &parseFrame();
-			if(*f)
+			if(*f) {
+				m_Marker = f->header;
 				return *f;
+			}
 
 			// Marker not here... Go find in another way.
 			seekUnsafe(pos() - Unit() + MARKER_FRAME_SIZE);
@@ -215,27 +220,65 @@ Frame const& Cursor::prevMarker() {
 				return m_frame = Frame();
 			}
 
-			seekUnsafe(((pos() - m_Marker) / Unit() - 1) * Unit() + m_Marker);
+			Offset here = pos();
+			Offset currentMarker = currentUnitStart();
+			if(currentMarker < here)
+				seekUnsafe(currentMarker);
+			else
+				seekUnsafe(currentMarker - Unit());
+
 			auto const* f = &parseFrame();
-			if(*f)
+			if(*f) {
+				m_Marker = f->header;
 				return *f;
+			}
 
 			// Marker not here... Go find in another way.
-			seekUnsafe(pos() + Unit());
+			seekUnsafe(here - 1);
 		}
 	}
 
 	return findMarker(false);
 }
 
+Offset Cursor::currentUnitStart() const {
+	if(!aligned() || m_Marker < 0)
+		return -1;
+	else if(Unit() <= 0)
+		return m_Marker;
+	else if(pos() >= m_Marker)
+		return (pos() - m_Marker) / Unit() * Unit() + m_Marker;
+	else
+		return std::max<Offset>(-1, (pos() - m_Marker - Unit() + 1) / Unit() * Unit() + m_Marker);
+}
+
+Offset Cursor::currentunitStart() const {
+	if(!aligned() || m_Marker <= 0)
+		return -1;
+	else if(unit() <= 0)
+		return m_Marker + MARKER_FRAME_SIZE;
+	else if(pos() >= m_Marker)
+		return (pos() - m_Marker - MARKER_FRAME_SIZE) / unit() * unit() + m_Marker + MARKER_FRAME_SIZE;
+	else
+		return std::max<Offset>(-1, (pos() - m_Marker - MARKER_FRAME_SIZE - unit() + 1) / unit() * unit() + m_Marker + MARKER_FRAME_SIZE);
+}
+
 Frame const& Cursor::nextIndex() {
-	if(!aligned()) {
-		auto const& f = nextMarker();
-		if(!f)
-			return f;
+	Offset thisUnitsIndex = currentUnitStart();
+
+	if(!aligned() || thisUnitsIndex < 0) {
+		auto const& fp = prevMarker();
+		if(!fp) {
+			auto const& fn = nextMarker();
+			if(!fn)
+				return fn;
+		}
+
+		thisUnitsIndex = currentUnitStart();
+		assert(thisUnitsIndex >= 0);
 	}
 
-	Offset thisUnitsIndex = m_Marker + MARKER_FRAME_SIZE;
+	thisUnitsIndex += MARKER_FRAME_SIZE;
 
 	if(pos() < thisUnitsIndex) {
 		// We are probably at the Marker.
@@ -254,7 +297,7 @@ Frame const& Cursor::nextIndex() {
 	}
 
 	// We are at the start of the (probable) Index frame.
-	auto const& f = parseFrame();
+	auto const& f = parseFrame(false);
 	if(!f)
 		// No valid frame after the Marker
 		return f;
@@ -278,23 +321,26 @@ Frame const& Cursor::prevIndex() {
 }
 
 Frame const& Cursor::nextMeta() {
+	// Move two Units forward, as its Index holds the reference to the Meta we need.
+	if(!nextIndex() || !nextIndex())
+		return m_frame = Frame();
+
 	Offset pos = index(RTC_STREAM_Meta);
-	assert(Unit() > 0);
 
 	if(pos < 0)
 		return m_frame = Frame();
 
-	seekUnsafe(pos + Unit());
+	seekUnsafe(pos);
 	return parseFrame();
 }
 
 Frame const& Cursor::prevMeta() {
 	Offset pos = index(RTC_STREAM_Meta);
-	assert(Unit() > 0);
 
 	if(pos < 0 || pos < Unit())
 		return m_frame = Frame();
 
+	assert(Unit() > 0);
 	seekUnsafe(pos - Unit());
 	return parseFrame();
 }
@@ -317,7 +363,11 @@ Frame const& Cursor::nextFrame() {
 	}
 
 	seekUnsafe(currentFrame().payload + currentFrame().length);
-	return parseFrame();
+	if(parseFrame())
+		return currentFrame();
+
+	// Unknown next frame. Skip to next Marker.
+	return nextMarker();
 }
 
 Frame const& Cursor::nextFrame(Stream const& stream) {
@@ -325,7 +375,7 @@ Frame const& Cursor::nextFrame(Stream const& stream) {
 	// in there of the given stream.
 
 	while(nextFrame())
-		if(currentFrame().stream->id == stream.id)
+		if(currentFrame().stream->id() == stream.id())
 			return currentFrame();
 
 	return currentFrame();
@@ -341,6 +391,10 @@ Frame const& Cursor::currentFrame() const {
 	return m_frame;
 }
 
+Frame const& Cursor::operator*() const {
+	return currentFrame();
+}
+
 Stream const* Cursor::stream(Stream::Id id, bool autoLoadMeta) {
 	if(id < 0)
 		return nullptr;
@@ -353,50 +407,29 @@ Stream const* Cursor::stream(Stream::Id id, bool autoLoadMeta) {
 	if(!autoLoadMeta)
 		return nullptr;
 	if(!aligned())
-		// Not possible to find the Meta.
-		return nullptr;
+		if(!findMarker(true))
+			return nullptr;
+	assert(aligned());
 
 	// Unknown ID. Try loading the Meta stream.
 	// This may happen during other frame scanning, so
 	// save the current offset, so we can return to it later on.
-	Offset offset = pos();
-	bool seekToMeta = true;
+	auto here = stashPos();
 
 	assert(m_Marker >= 0);
 
-	if(Unit() > 0) {
-		// We know the size of the Unit. Try loading the Meta of the next
-		// Unit, as that one is probably more accurate.
-		try {
-			seekUnsafe(m_Marker + Unit() + MARKER_FRAME_SIZE);
-			seekToMeta = false;
-		} catch(SeekError&) {
-		}
-	}
-
 	try {
-		if(seekToMeta) {
-again:
-			// Use the current Unit's Meta.
-			seekUnsafe(m_Marker + MARKER_FRAME_SIZE);
-		}
-
-		// Move to next Meta from here.
-		if(nextMeta()) {
+		// Move to next Meta, which is probably of the next Unit.
+		// This one is more accurate. If that does not work, fall back to the
+		// Meta of this Unit.
+		if(nextMeta() || prevMeta()) {
 			// Load the frame that is at the current cursor.
 			loadMeta();
 		}
-	} catch(SeekError&) {
-		if(!seekToMeta) {
-			// We tried to use the next Unit's Meta.
-			// That didn't work. Try this Unit's Meta instead.
-			goto again;
-		}
 
+	} catch(SeekError&) {
 		// Too bad. Give up.
 	}
-
-	seekUnsafe(offset);
 
 	// Retry lookup.
 	// TODO: fix the corner case that the stream is only mentioned in a meta.
@@ -404,8 +437,7 @@ again:
 	return it == m_streams.end() ? nullptr : it->second;
 }
 
-Frame const& Cursor::parseFrame() {
-	m_frame = Frame();
+Frame const& Cursor::parseFrame(bool autoLoadMeta) {
 	m_eof = false;
 
 	try {
@@ -418,15 +450,17 @@ Frame const& Cursor::parseFrame() {
 
 		frame.more = (x & 1u);
 
-		if(!(frame.stream = stream(id)))
+		if(!(frame.stream = stream(id, autoLoadMeta))) {
 			// Unknown stream.
-			return m_frame;
+			return m_frame = Frame();
+		}
 
 		if(frame.stream->isVariableLength()) {
 			frame.payload = o += reader().readInt(o, x);
-			if(x > Reader::MaxPayload)
+			if(x > Reader::MaxPayload) {
 				// Invalid length.
-				return m_frame;
+				return m_frame = Frame();
+			}
 
 			frame.length = (size_t)x;
 		} else {
@@ -438,7 +472,7 @@ Frame const& Cursor::parseFrame() {
 	} catch(FormatError&) {
 		// Cannot parse bytes.
 		m_eof = reader().eof();
-		return m_frame;
+		return m_frame = Frame();
 	}
 }
 
@@ -460,76 +494,68 @@ bool Cursor::eof() const {
 
 Offset Cursor::index(Stream::Id id) {
 	Offset here = pos();
+	auto scope = stashPos();
 
-	try {
-		// Make sure the index is up to date with the current pos().
-		if(!aligned()) {
-			m_index.clear();
-			m_Unit = -1;
-			m_unit = -1;
-			if(!nextIndex())
-				goto error;
-		}
-
-		if(Unit() <= 0) {
-rebuild_Index:
-			// No Index loaded yet.
-			m_index.clear();
-			m_Unit = -1;
-			m_unit = -1;
-
-			// Go back to the current Unit's Marker.
-			if(!prevMarker())
-				goto error;
-
-			// Now, go to the Index.
-			if(!nextIndex())
-				goto error;
-
-			// Load it.
-			loadIndex();
-		} else {
-			// The Index should be in the index.
-			auto it = m_index.find(RTC_STREAM_Index);
-			if(it == m_index.end())
-				// Huh? Bad index?
-				goto rebuild_Index;
-
-			if(here < it->second || here >= it->second + Unit())
-				// Out of Unit sync.
-				goto rebuild_Index;
-		}
-
-		// If we get here, we know m_index is in sync with the current Unit.
-		// Check if the delta is valid too.
-		assert(unit() > 0);
-
-		auto it = m_index.find(RTC_STREAM_index);
-		if(it == m_index.end() || it->second > here) {
-			// Fully replay index frames from last Index.
-			goto rebuild_Index;
-		} else if(it->second + unit() < here) {
-			// Replay the last (few) index frame(s).
-			Offset replay = it->second;
-
-			while(replay < here) {
-				seekUnsafe(replay);
-				loadIndex();
-				replay += unit();
-			}
-		}
-
-		// Ok, index is up to date now.
-		it = m_index.find(id);
-		return it == m_index.end() ? -1 : it->second;
-	} catch(...) {
-		seekUnsafe(here);
-		throw;
+	// Make sure the index is up to date with the current pos().
+	if(!aligned()) {
+		m_index.clear();
+		m_Unit = -1;
+		m_unit = -1;
+		if(!nextIndex())
+			return -1;
 	}
 
-error:
-	seekUnsafe(here);
-	return -1;
+	if(Unit() <= 0) {
+rebuild_Index:
+		// No Index loaded yet.
+		m_index.clear();
+		m_Unit = -1;
+		m_unit = -1;
+
+		// Go back to the current Unit's Marker.
+		if(!prevMarker())
+			return -1;
+
+		// Now, go to the Index.
+		if(!nextIndex())
+			return -1;
+
+		// Load it.
+		loadIndex();
+	} else {
+		// The Index should be in the index.
+		auto it = m_index.find(RTC_STREAM_Index);
+		if(it == m_index.end())
+			// Huh? Bad index?
+			goto rebuild_Index;
+
+		if(here < it->second || here >= it->second + Unit())
+			// Out of Unit sync.
+			goto rebuild_Index;
+	}
+
+	// If we get here, we know m_index is in sync with the current Unit.
+	// Check if the delta is valid too.
+	assert(unit() > 0);
+
+	auto it = m_index.find(RTC_STREAM_index);
+	if(it == m_index.end() || it->second > here) {
+		// Fully replay index frames from last Index.
+		goto rebuild_Index;
+	} else if(it->second + unit() < here) {
+		// Replay the last (few) index frame(s).
+		Offset replay = it->second;
+
+		while(replay < here) {
+			seekUnsafe(replay);
+			loadIndex();
+			replay += unit();
+		}
+	}
+
+	// Ok, index is up to date now.
+	it = m_index.find(id);
+	return it == m_index.end() ? -1 : it->second;
 }
 
 std::vector<unsigned char> Cursor::fullFrame() {
@@ -543,7 +569,7 @@ std::vector<unsigned char> Cursor::fullFrame() {
 			if(reader().read(f.payload, &buffer[offset], f.length) != f.length)
 				throw FormatError("EOF");
 		}
-	);
+	});
 
 	return buffer;
 }
@@ -558,7 +584,7 @@ void Cursor::loadIndex() {
 	Offset here = pos();
 
 	bool haveCount = false;
-	switch(currentFrame().stream->id) {
+	switch(currentFrame().stream->id()) {
 	case RTC_STREAM_Index:
 		haveCount = true;
 		break;
@@ -587,9 +613,10 @@ void Cursor::loadIndex() {
 		decoded += Reader::decodeInt(&buffer[decoded], buffer.size() - decoded, off);
 		if((off & 1))
 			throw FormatError("Wrong entry offset");
-		off >= 1u;
+		off >>= 1u;
 
-		m_index[id] = here - off;
+		if(off)
+			m_index[(Stream::Id)id] = here - (Offset)off;
 	}
 
 	if(haveCount) {
@@ -601,13 +628,16 @@ void Cursor::loadIndex() {
 		if(it != m_index.end())
 			m_unit = here - it->second;
 	}
+
+	// Override index to point to the last parsed [Ii]ndex frame.
+	m_index[RTC_STREAM_index] = here;
 }
 
 void Cursor::loadMeta() {
 	if(!parseFrame())
 		throw FormatError("Wrong frame");
 
-	switch(currentFrame().stream->id) {
+	switch(currentFrame().stream->id()) {
 	case RTC_STREAM_Meta:
 	case RTC_STREAM_meta:
 		break;
@@ -618,10 +648,15 @@ void Cursor::loadMeta() {
 	// Copy full index to a buffer.
 	auto buffer = fullFrame();
 
-	auto j = json.parse((char const*)buffer.data());
+	auto j = json::parse((char const*)buffer.data());
 	printf("meta json: %s\n", j.dump().c_str());
 
 	// TODO: merge into m_meta
+}
+
+Scope Cursor::stashPos() {
+	Offset here = pos();
+	return Scope([this,here](){ seekUnsafe(here); });
 }
 
 } // namespace

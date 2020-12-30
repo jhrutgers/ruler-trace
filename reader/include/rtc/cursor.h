@@ -22,6 +22,7 @@
 
 #include "rtc_writer.h"
 #include "rtc/stream.h"
+#include "rtc/util.h"
 
 #include <map>
 
@@ -77,21 +78,23 @@ namespace rtc {
 		Frame const& prevMeta();
 		Frame const& nextFrame();
 		Frame const& nextFrame(Stream const& stream);
-
 		Cursor& operator++();
 
 		Frame const& currentFrame() const;
+		Frame const& operator*() const;
+
 		bool aligned() const;
 		Offset Unit() const;
 		Offset unit() const;
+		Offset currentUnitStart() const;
+		Offset currentunitStart() const;
 
 		Stream const* stream(Stream::Id id, bool autoLoadMeta = true);
 		Offset index(Stream::Id id);
 
 		template <typename F>
 		void fullFrame(F&& f, size_t max = 0) {
-			size_t i = 0;
-			while(currentFrame() && currentFrame()->more) {
+			while(currentFrame() && currentFrame().more) {
 				f(currentFrame());
 
 				if(max > 0 && --max == 0)
@@ -107,9 +110,10 @@ namespace rtc {
 	protected:
 		void seekUnsafe(Offset offset);
 		Frame const& findMarker(bool forward);
-		Frame const& parseFrame();
+		Frame const& parseFrame(bool autoLoadMeta = true);
 		void loadMeta();
 		void loadIndex();
+		Scope stashPos();
 	private:
 		Reader* m_reader;
 		Offset m_pos;
@@ -120,7 +124,7 @@ namespace rtc {
 		Offset m_unit = -1;
 		Frame m_frame;
 		std::map<Stream::Id,Stream*> m_streams;
-		std::map<Stream::Id,Offset*> m_index;
+		std::map<Stream::Id,Offset> m_index;
 		uint64_t m_IndexCount;
 		json m_meta;
 
