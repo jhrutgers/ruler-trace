@@ -47,7 +47,6 @@ void Cursor::reset() {
 	m_streams.clear();
 	m_index.clear();
 	m_IndexCount = 0;
-	m_meta = json();
 }
 
 Offset Cursor::pos() const {
@@ -403,7 +402,7 @@ Stream const* Cursor::stream(Stream::Id id, bool autoLoadMeta) {
 
 	auto it = m_streams.find(id);
 	if(it != m_streams.end())
-		return it->second;
+		return it->second.get();
 	if(!autoLoadMeta)
 		return nullptr;
 	if(!aligned())
@@ -434,7 +433,7 @@ Stream const* Cursor::stream(Stream::Id id, bool autoLoadMeta) {
 	// Retry lookup.
 	// TODO: fix the corner case that the stream is only mentioned in a meta.
 	it = m_streams.find(id);
-	return it == m_streams.end() ? nullptr : it->second;
+	return it == m_streams.end() ? nullptr : it->second.get();
 }
 
 Frame const& Cursor::parseFrame(bool autoLoadMeta) {
@@ -649,14 +648,41 @@ void Cursor::loadMeta() {
 	auto buffer = fullFrame();
 
 	auto j = json::parse((char const*)buffer.data());
-	printf("meta json: %s\n", j.dump().c_str());
+	if(!j.is_array() || j.size() < 1)
+		throw FormatError("JSON format error");
 
-	// TODO: merge into m_meta
+	try {
+		for(auto const& s : j) {
+			if(!s.is_object())
+				continue;
+
+			auto id = (Stream::Id)s["id"];
+			auto stream = m_streams.find(id);
+			if(stream == m_streams.end())
+				m_streams[id].reset(new Stream(s));
+			else
+				*stream->second = s;
+		}
+	} catch(json::exception const& e) {
+		throw FormatError(e.what());
+	}
 }
 
 Scope Cursor::stashPos() {
 	Offset here = pos();
-	return Scope([this,here](){ seekUnsafe(here); });
+	bool a = aligned();
+	return Scope([this,here,a](){ seekUnsafe(here); m_aligned = a; });
+}
+
+crc_t Cursor::currentUnitCrc() {
+#ifdef RTC_NO_CRC
+	return 0;
+#else
+	auto pos = stashPos();
+	Offset end = this->pos();
+	Offset start = prevMarker() + MARKER_FRAME_SIZE;
+	return reader().crc(start, end);
+#endif
 }
 
 } // namespace

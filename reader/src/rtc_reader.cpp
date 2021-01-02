@@ -177,5 +177,38 @@ size_t Reader::decodeInt(unsigned char* buffer, size_t len, uint64_t& dst) {
 	throw FormatError("Int too long");
 }
 
+crc_t Reader::crc(Offset start, Offset end) {
+#ifdef RTC_NO_CRC
+	(void)start;
+	(void)end;
+	return 0;
+#else
+	if(start < 0)
+		start = 0;
+	if(end < 0) {
+		seek(0, SEEK_END);
+		end = pos();
+	}
+	if(start >= end)
+		return rtc_crc_end(rtc_crc_start());
+
+	crc_t crc = rtc_crc_start();
+	char buffer[1u << 12u];
+	Offset len = end - start;
+	for(Offset i = 0; i < len; i += sizeof(buffer)) {
+		size_t r = read(start + i, buffer, std::min<size_t>((size_t)(len - i), sizeof(buffer)));
+		crc = rtc_crc(crc, buffer, r);
+		i += r;
+
+		if(!r) {
+			assert(eof());
+			break;
+		}
+	}
+
+	return rtc_crc_end(crc);
+#endif
+}
+
 } // namespace
 

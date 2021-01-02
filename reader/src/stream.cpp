@@ -21,9 +21,28 @@
 
 namespace rtc {
 
-Stream::Stream(int id, char const* name, size_t frameLength, bool cont)
-	: m_id(id), m_name(name), m_frameLength(frameLength), m_cont(cont)
+Stream::Stream()
+	: m_id(-1), m_frameLength(), m_cont()
 {
+}
+
+Stream::Stream(Stream::Id id, char const* name, size_t frameLength, bool cont, char const* format)
+	: m_id(id), m_name(name), m_frameLength(frameLength), m_cont(cont), m_format(format && *format ? format : "raw")
+{
+	m_meta["id"] = this->id();
+	m_meta["name"] = this->name().c_str();
+	if(this->frameLength() != VariableLength)
+		m_meta["length"] = this->frameLength();
+	if(this->cont())
+		m_meta["cont"] = true;
+	if(this->format() != "raw")
+		m_meta["format"] = this->format().c_str();
+}
+
+Stream::Stream(json const& meta)
+	: Stream()
+{
+	*this = meta;
 }
 
 int Stream::id() const {
@@ -50,6 +69,24 @@ bool Stream::cont() const {
 	return m_cont;
 }
 
+std::string const& Stream::format() const {
+	return m_format;
+}
+
+json const& Stream::meta() const {
+	return m_meta;
+}
+
+Stream& Stream::operator=(json const& meta) {
+	m_id = (Id)meta["id"];
+	m_name = meta.value("name", "");
+	m_frameLength = meta.value("length", (size_t)VariableLength);
+	m_cont = meta.value("cont", false);
+	m_format = meta.value("format", "raw");
+	m_meta = meta;
+	return *this;
+}
+
 Stream const defaultStreams[RTC_STREAM_DEFAULT_COUNT] = {
 	Stream(RTC_STREAM_nop, "nop", 0),
 	Stream(RTC_STREAM_padding, "padding", Stream::VariableLength),
@@ -59,7 +96,7 @@ Stream const defaultStreams[RTC_STREAM_DEFAULT_COUNT] = {
 	Stream(RTC_STREAM_Meta, "Meta", Stream::VariableLength),
 	Stream(RTC_STREAM_meta, "meta", Stream::VariableLength),
 	Stream(RTC_STREAM_Platform, "Platform", 4),
-	Stream(RTC_STREAM_Crc, "Crc", Stream::VariableLength),
+	Stream(RTC_STREAM_Crc, "Crc", sizeof(crc_t)),
 };
 
 } // namespace

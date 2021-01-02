@@ -150,18 +150,18 @@ static crc_t const crc_lookup_table[256] = {
 	0x89B8FD09UL, 0x8D79E0BEUL, 0x803AC667UL, 0x84FBDBD0UL, 0x9ABC8BD5UL, 0x9E7D9662UL, 0x933EB0BBUL, 0x97FFAD0CUL,
 	0xAFB010B1UL, 0xAB710D06UL, 0xA6322BDFUL, 0xA2F33668UL, 0xBCB4666DUL, 0xB8757BDAUL, 0xB5365D03UL, 0xB1F740B4UL};
 
-static crc_t rtc_crc_start() {
+crc_t rtc_crc_start() {
 	return 0xffffffffUL;
 }
 
-static crc_t rtc_crc(crc_t crc, void const* buffer, size_t len) {
+crc_t rtc_crc(crc_t crc, void const* buffer, size_t len) {
 	char const* buf = (char const*)buffer;
 	for(; len; len--, buf++)
 		crc = (crc >> 8u) ^ crc_lookup_table[(crc ^ (crc_t)(unsigned char)*buf) & 0xffu];
 	return crc;
 }
 
-static crc_t rtc_crc_end(crc_t crc) {
+crc_t rtc_crc_end(crc_t crc) {
 	return crc ^ 0xffffffffUL;
 }
 #endif

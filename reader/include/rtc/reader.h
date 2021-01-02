@@ -74,6 +74,8 @@ namespace rtc {
 		bool eof() const;
 
 		Cursor cursor();
+
+		crc_t crc(Offset start, Offset end);
 	protected:
 		FILE* file() const;
 	private:

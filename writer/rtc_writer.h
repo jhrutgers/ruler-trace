@@ -256,6 +256,26 @@ int rtc_write(rtc_stream* s, void const* buffer, size_t len, bool more
 #endif
 	);
 
+#ifndef RTC_NO_CRC
+/*!
+ * \brief Initialize a new CRC value.
+ *
+ * Call #rtc_crc() as often as required, starting with the result of this function.
+ * Make sure to call #rtc_crc_end() to finalize the computed CRC.
+ */
+crc_t rtc_crc_start();
+
+/*!
+ * \brief Update a CRC given a block of data.
+ */
+crc_t rtc_crc(crc_t crc, void const* buffer, size_t len);
+
+/*!
+ * \brief Finalize a CRC.
+ */
+crc_t rtc_crc_end(crc_t crc);
+#endif
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

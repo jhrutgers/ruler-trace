@@ -38,12 +38,6 @@ namespace rtc {
 
 	class Frame {
 	public:
-		/*
-		Frame() {}
-		Frame(Offset header, Offset payload, size_t length, Stream const* stream)
-			: header(header), payload(payload), length(length), stream(stream) {}
-		*/
-
 		bool valid() const { return header >= 0; }
 		operator bool() const { return valid(); }
 		bool empty() const { return !valid() || length == 0; }
@@ -88,6 +82,7 @@ namespace rtc {
 		Offset unit() const;
 		Offset currentUnitStart() const;
 		Offset currentunitStart() const;
+		crc_t currentUnitCrc();
 
 		Stream const* stream(Stream::Id id, bool autoLoadMeta = true);
 		Offset index(Stream::Id id);
@@ -123,10 +118,9 @@ namespace rtc {
 		Offset m_Unit = -1;
 		Offset m_unit = -1;
 		Frame m_frame;
-		std::map<Stream::Id,Stream*> m_streams;
+		std::map<Stream::Id,std::unique_ptr<Stream>> m_streams;
 		std::map<Stream::Id,Offset> m_index;
 		uint64_t m_IndexCount;
-		json m_meta;
 
 		friend class Reader;
 	};

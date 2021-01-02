@@ -143,6 +143,10 @@ void dump(int argc, char** argv) {
 
 			dump_mem(reader, f);
 			prev = f.payload + f.length;
+			if(f.stream && f.stream->id() == RTC_STREAM_Crc) {
+				// TODO: compare with frame
+				printf("+Unit CRC: %lx\n", (long)c.currentUnitCrc());
+			}
 		}
 		printf("<parsed end>\n");
 	} catch(rtc::SeekError&) {

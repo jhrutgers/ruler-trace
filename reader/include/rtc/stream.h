@@ -35,7 +35,9 @@ namespace rtc {
 
 		static const size_t VariableLength = RTC_STREAM_VARIABLE_LENGTH;
 
-		Stream(Id id, char const* name, size_t frameLength = VariableLength, bool cont = false);
+		Stream();
+		Stream(Id id, char const* name, size_t frameLength = VariableLength, bool cont = false, char const* format = "raw");
+		explicit Stream(json const& meta);
 
 		Id id() const;
 		std::string const& name() const;
@@ -43,11 +45,27 @@ namespace rtc {
 		bool isFixedLength() const;
 		bool isVariableLength() const;
 		bool cont() const;
+		std::string const& format() const;
+		json const& meta() const;
+
+		Stream& operator=(json const& meta);
+
+		template <typename T>
+		T operator[](char const* key) const {
+			return meta()[key];
+		}
+
+		template <typename T>
+		T value(char const* key, T defaultValue) const {
+			return meta().template value<T>(key, defaultValue);
+		}
 	private:
 		Id m_id;
 		std::string m_name;
 		size_t m_frameLength;
 		bool m_cont;
+		std::string m_format;
+		json m_meta;
 	};
 
 	extern Stream const defaultStreams[RTC_STREAM_DEFAULT_COUNT];
