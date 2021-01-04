@@ -594,11 +594,37 @@ static int rtc_meta(rtc_stream* s) {
 
 #ifndef RTC_NO_CRC
 #  define RTC_FRAME_CRC_SIZE 5
+static int rtc_start_unit(rtc_handle* h);
+
 static int rtc_Crc(rtc_handle* h) {
+	size_t cursor;
+	size_t rem;
+
 	crc_t crc = rtc_crc_end(h->crc);
 	rtc_stream* s = &h->default_streams[RTC_STREAM_Crc];
 
-	return rtc_write_(s, &crc, sizeof(crc), false, true);
+again:
+	/* The CRC frame should not be moved by rtc_write_() after another [Ii]ndex. */
+	rem = h->Unit_end - h->cursor;
+	if(rem < RTC_FRAME_CRC_SIZE)
+		/* Does not fit in current Unit, and it makes no sense to add a frame directly after the Marker. */
+		return EAGAIN;
+
+	rem = h->unit_end - h->cursor;
+	if(rem < RTC_FRAME_CRC_SIZE) {
+		/* Does not fit in current unit. Fill with padding, force a new unit and retry. */
+		check_res(rtc_padding(h, rem));
+		check_res(rtc_start_unit(h));
+		goto again;
+	}
+
+	/* This call should always emit only our frame. */
+	cursor = h->cursor;
+	check_res(rtc_write_(s, &crc, sizeof(crc), false, true));
+	assert(h->cursor - cursor == RTC_FRAME_CRC_SIZE);
+	(void)cursor;
+
+	return 0;
 }
 #endif /* !RTC_NO_CRC */
 
